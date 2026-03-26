@@ -1,0 +1,1040 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Monitor de Quiosques</title>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        /* Bloco de Login - Adicione no início do seu <style> */
+        #login-screen {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: #0a0a0a; display: flex; align-items: center; justify-content: center; z-index: 9999;
+        }
+        .login-box {
+            background: #1a1a1a; padding: 30px; border-radius: 12px; border: 1px solid #333; width: 300px; text-align: center;
+        }
+        .login-box input {
+            width: 100%; padding: 10px; margin: 10px 0; background: #000; border: 1px solid #444; color: #fff; border-radius: 4px;
+        }
+        .login-box button {
+            width: 100%; padding: 10px; background: #f97316; border: none; color: #fff; font-weight: bold; cursor: pointer; border-radius: 4px;
+        }
+        /* Esconde o monitor enquanto não logar */
+        #monitor-wrapper { display: none; }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        
+        body { 
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            background: #0a0a0a;
+            color: #e0e7ff;
+            padding: 32px 20px;
+            min-height: 100vh;
+        }
+        
+        .container {
+            max-width: 1280px;
+            margin: 0 auto;
+        }
+
+        /* Header */
+        header {
+            margin-bottom: 32px;
+        }
+
+        .header-top {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            margin-bottom: 24px;
+        }
+
+        h1 {
+            font-size: 32px;
+            font-weight: 700;
+            line-height: 1.2;
+            color: #cbd5e1;
+            margin: 0;
+        }
+
+        .header-meta {
+            display: flex;
+            gap: 16px;
+            align-items: center;
+            font-size: 14px;
+            color: #a5b4fc;
+        }
+
+        .status-indicator {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 8px 14px;
+            background: rgba(30, 41, 59, 0.8);
+            border: 1px solid rgba(148, 163, 184, 0.2);
+            border-radius: 8px;
+            font-weight: 600;
+            backdrop-filter: blur(10px);
+        }
+
+        .dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            box-shadow: 0 0 8px currentColor;
+        }
+
+        .dot.online { 
+            background: #10b981;
+            color: #10b981;
+        }
+        .dot.offline { 
+            background: #ef4444;
+            color: #ef4444;
+        }
+
+        /* Stats Row */
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 16px;
+            margin-bottom: 40px;
+        }
+
+        .stat-card {
+            background: rgba(20, 20, 20, 0.6);
+            border: 1px solid rgba(148, 163, 184, 0.15);
+            border-radius: 12px;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            backdrop-filter: blur(10px);
+            transition: all 0.3s ease;
+        }
+
+        .stat-card:hover {
+            border-color: rgba(6, 182, 212, 0.4);
+            background: rgba(20, 20, 20, 0.8);
+        }
+
+        .stat-label {
+            font-size: 12px;
+            font-weight: 600;
+            color: #64748b;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .stat-value {
+            font-size: 32px;
+            font-weight: 700;
+            color: #e0e7ff;
+        }
+
+        .stat-description {
+            font-size: 12px;
+            color: #64748b;
+        }
+
+        /* Main Grid */
+        .quiosques-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 24px;
+        }
+
+        .quiosque-card {
+            background: rgba(20, 20, 20, 0.6);
+            border: 1px solid rgba(148, 163, 184, 0.15);
+            border-radius: 12px;
+            overflow: hidden;
+            transition: all 0.3s ease;
+            backdrop-filter: blur(10px);
+        }
+
+        .quiosque-card:hover {
+            border-color: rgba(6, 182, 212, 0.4);
+            background: rgba(20, 20, 20, 0.8);
+            box-shadow: 0 8px 32px rgba(6, 182, 212, 0.1);
+            transform: translateY(-2px);
+        }
+
+        .card-header {
+            padding: 18px;
+            border-bottom: 1px solid rgba(148, 163, 184, 0.08);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .card-title {
+            font-size: 16px;
+            font-weight: 700;
+            color: #cbd5e1;
+            letter-spacing: 0.5px;
+        }
+
+        .badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 6px 12px;
+            border-radius: 12px;
+            font-size: 12px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .badge.online {
+            background: rgba(16, 185, 129, 0.2);
+            color: #10b981;
+            border: 1px solid rgba(16, 185, 129, 0.4);
+        }
+
+        .badge.offline {
+            background: rgba(239, 68, 68, 0.2);
+            color: #ef4444;
+            border: 1px solid rgba(239, 68, 68, 0.4);
+        }
+
+        .card-body {
+            padding: 18px;
+        }
+
+        .metrics-row {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 16px;
+            margin-bottom: 18px;
+        }
+
+        .metric-item {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+
+        .metric-label {
+            font-size: 10px;
+            font-weight: 600;
+            color: #64748b;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .metric-data {
+            display: flex;
+            align-items: baseline;
+            gap: 3px;
+        }
+
+        .metric-value {
+            font-size: 22px;
+            font-weight: 700;
+            background: linear-gradient(135deg, #f97316 0%, #fb923c 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .metric-unit {
+            font-size: 11px;
+            color: #94a3b8;
+        }
+
+        .internet-status {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 14px;
+            font-weight: 600;
+        }
+
+        .status-ok { color: #10b981; }
+        .status-error { color: #ef4444; }
+
+        .chart-wrapper {
+            position: relative;
+            height: 180px;
+            margin: 18px -18px -18px -18px;
+            padding: 18px;
+            border-top: 1px solid rgba(148, 163, 184, 0.08);
+            background: rgba(10, 10, 10, 0.8);
+        }
+
+        .card-footer {
+            padding: 10px 18px;
+            background: rgba(10, 10, 10, 0.6);
+            border-top: 1px solid rgba(148, 163, 184, 0.08);
+            font-size: 11px;
+            color: #475569;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        /* Loading & Error States */
+        .empty-state {
+            text-align: center;
+            padding: 80px 20px;
+            color: #64748b;
+        }
+
+        .empty-state-icon {
+            font-size: 56px;
+            margin-bottom: 16px;
+            opacity: 0.6;
+        }
+
+        .empty-state-text {
+            font-size: 18px;
+            color: #cbd5e1;
+            margin-bottom: 8px;
+        }
+
+        .error-banner {
+            background: rgba(239, 68, 68, 0.1);
+            border: 1px solid rgba(239, 68, 68, 0.3);
+            border-radius: 12px;
+            padding: 16px;
+            margin-bottom: 24px;
+            color: #fca5a5;
+            font-size: 14px;
+            backdrop-filter: blur(10px);
+        }
+
+        /* Responsive */
+        /* Modal */
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.85);
+            backdrop-filter: blur(4px);
+            z-index: 1000;
+            overflow-y: auto;
+        }
+
+        .modal.active {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .modal-content {
+            background: rgba(20, 20, 20, 0.95);
+            border: 1px solid rgba(148, 163, 184, 0.2);
+            border-radius: 16px;
+            width: 90%;
+            max-width: 1200px;
+            max-height: 90vh;
+            overflow-y: auto;
+            backdrop-filter: blur(10px);
+            padding: 30px;
+        }
+
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 24px;
+            border-bottom: 1px solid rgba(148, 163, 184, 0.1);
+            padding-bottom: 16px;
+        }
+
+        .modal-title {
+            font-size: 24px;
+            font-weight: 700;
+            color: #cbd5e1;
+        }
+
+        .modal-close {
+            background: none;
+            border: none;
+            font-size: 28px;
+            color: #94a3b8;
+            cursor: pointer;
+            padding: 0;
+            width: 40px;
+            height: 40px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: color 0.2s;
+        }
+
+        .modal-close:hover {
+            color: #cbd5e1;
+        }
+
+        .modal-chart-wrapper {
+            position: relative;
+            height: 400px;
+            margin-bottom: 20px;
+        }
+
+        .modal-stats {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 16px;
+            margin-top: 24px;
+        }
+
+        .modal-stat {
+            background: rgba(30, 41, 59, 0.5);
+            padding: 16px;
+            border-radius: 8px;
+            border: 1px solid rgba(148, 163, 184, 0.1);
+        }
+
+        .modal-stat-label {
+            font-size: 11px;
+            font-weight: 600;
+            color: #64748b;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            margin-bottom: 8px;
+        }
+
+        .modal-stat-value {
+            font-size: 20px;
+            font-weight: 700;
+            color: #e0e7ff;
+        }
+
+        @media (max-width: 768px) {
+            body { padding: 20px 16px; }
+            h1 { font-size: 24px; }
+            .header-top { flex-direction: column; gap: 16px; }
+            .quiosques-grid { grid-template-columns: 1fr; }
+            .stats-grid { grid-template-columns: repeat(2, 1fr); }
+            .chart-wrapper { height: 200px; }
+        }
+
+        @media (max-width: 480px) {
+            .stats-grid { grid-template-columns: 1fr; }
+            .metrics-row { gap: 12px; }
+            .header-meta { flex-direction: column; gap: 8px; width: 100%; }
+            .stat-value { font-size: 24px; }
+        }
+    </style>
+</head>
+<body>
+    <div id="login-screen">
+        <div class="login-box">
+            <h2 style="color:white; margin-bottom:20px;">Acesso Restrito</h2>
+            <input type="email" id="user-email" placeholder="E-mail">
+            <input type="password" id="user-pass" placeholder="Senha">
+            <button onclick="realizarLogin()">Entrar</button>
+            <p id="msg-erro" style="color:red; font-size:12px; margin-top:10px; display:none;">Acesso negado.</p>
+        </div>
+    </div>
+
+    <div id="monitor-wrapper">
+        <div class="container">
+            <!-- Header -->
+            <header>
+                <div class="header-top">
+                    <div>
+                        <h1>Monitor de Quiosques</h1>
+                    </div>
+                    <div class="header-meta">
+                        <div class="status-indicator">
+                            <span class="dot online"></span>
+                            <span><strong id="count-online">0</strong> online</span>
+                        </div>
+                        <div class="status-indicator">
+                            <span class="dot offline"></span>
+                            <span><strong id="count-offline">0</strong> offline</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Stats -->
+                <div class="stats-grid">
+                    <div class="stat-card">
+                        <span class="stat-label">Total</span>
+                        <span class="stat-value" id="stat-total">0</span>
+                        <span class="stat-description">quiosques monitorados</span>
+                    </div>
+                    <div class="stat-card">
+                        <span class="stat-label">CPU Médio</span>
+                        <span class="stat-value" id="stat-cpu">--</span>
+                        <span class="stat-description">uso atual</span>
+                    </div>
+                    <div class="stat-card">
+                        <span class="stat-label">RAM Média</span>
+                        <span class="stat-value" id="stat-ram">--</span>
+                        <span class="stat-description">uso atual</span>
+                    </div>
+                </div>
+            </header>
+
+            <!-- Main Content -->
+            <main id="main-content">
+                <div class="empty-state">
+                    <div class="empty-state-icon">⏳</div>
+                    <div class="empty-state-text">Carregando quiosques...</div>
+                </div>
+            </main>
+        </div>
+
+        <!-- Modal de Detalhes -->
+        <div id="detailsModal" class="modal">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <div class="modal-title" id="modalTitle">Detalhes</div>
+                    <button class="modal-close" onclick="closeModal()">&times;</button>
+                </div>
+                <div class="modal-chart-wrapper">
+                    <canvas id="modalChart"></canvas>
+                </div>
+                <div class="modal-stats" id="modalStats"></div>
+            </div>
+        </div>
+
+        <script>
+            const CONFIG_URL = "https://qwgsqxoehrqyznvuultv.supabase.co";
+            const CONFIG_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InF3Z3NxeG9laHJxeXpudnV1bHR2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQwMTM4MDIsImV4cCI6MjA4OTU4OTgwMn0.sQi5HusGkn-0Ky9AHSGUshZMmRVxWN8DUgIHXsOcw3o";
+
+            const supabaseClient = window.supabase.createClient(CONFIG_URL, CONFIG_KEY);
+
+            async function realizarLogin() {
+                const email = document.getElementById('user-email').value;
+                const pass = document.getElementById('user-pass').value;
+
+                const { data, error } = await supabaseClient.auth.signInWithPassword({
+                    email: email,
+                    password: pass,
+                });
+
+                if (error) {
+                    document.getElementById('msg-erro').style.display = 'block';
+                } else {
+                    // Se logou, esconde o login e mostra o seu monitor
+                    document.getElementById('login-screen').style.display = 'none';
+                    document.getElementById('monitor-wrapper').style.display = 'block';
+                    fetchStatus(); // Carrega os dados imediatamente após o login
+                }
+            }
+
+            const metricsHistory = {};
+            const metricsHistoryFull = {}; // Histórico completo do dia
+            const MAX_HISTORY = 30; // Amostras para os cards (5 em 5 min = ~2.5 horas)
+            const MAX_HISTORY_FULL = 288; // Histórico completo do dia (5 em 5 min = 24 horas)
+            const charts = {};
+            let modalChart = null;
+
+            async function fetchStatus() {
+                try {
+                    const { data, error } = await supabaseClient
+                        .from('dashboard_quiosques')
+                        .select('*')
+                        .order('ultima_leitura', { ascending: false });
+
+                    if (error) throw error;
+
+                    // Destruir instâncias de gráficos existentes antes de limpar o HTML
+                    // Isso evita erros no plugin de tooltip quando o DOM é resetado
+                    Object.keys(charts).forEach(id => {
+                        if (charts[id]) charts[id].destroy();
+                        delete charts[id];
+                    });
+
+                    if (!data || data.length === 0) {
+                        document.getElementById('main-content').innerHTML = `
+                            <div class="empty-state">
+                                <div class="empty-state-icon">📊</div>
+                                <div class="empty-state-text">Nenhum quiosque encontrado</div>
+                            </div>
+                        `;
+                        return;
+                    }
+
+                    // Atualizar stats
+                    updateStats(data);
+
+                    // Renderizar cards
+                    document.getElementById('main-content').innerHTML = `
+                        <div class="quiosques-grid">
+                            ${data.map(q => createQuiosqueCard(q)).join('')}
+                        </div>
+                    `;
+
+                    // Renderizar gráficos
+                    setTimeout(() => {
+                        data.forEach(q => renderChart(q.quiosque_id));
+                    }, 100);
+
+                } catch (err) {
+                    console.error("Erro:", err);
+                    document.getElementById('main-content').innerHTML = `
+                        <div class="error-banner">
+                            ❌ Erro ao carregar dados: ${err.message}
+                        </div>
+                    `;
+                }
+            }
+
+            function updateStats(data) {
+                const online = data.filter(q => q.status_operacional === 'ONLINE').length;
+                const offline = data.filter(q => q.status_operacional === 'OFFLINE').length;
+                const avgCpu = (data.reduce((sum, q) => sum + parseFloat(q.cpu_usage), 0) / data.length).toFixed(1);
+                const avgRam = (data.reduce((sum, q) => sum + parseFloat(q.ram_usage), 0) / data.length).toFixed(1);
+
+                document.getElementById('count-online').textContent = online;
+                document.getElementById('count-offline').textContent = offline;
+                document.getElementById('stat-total').textContent = data.length;
+                document.getElementById('stat-cpu').textContent = avgCpu + '%';
+                document.getElementById('stat-ram').textContent = avgRam + '%';
+            }
+
+            function createQuiosqueCard(q) {
+                if (!metricsHistory[q.quiosque_id]) {
+                    metricsHistory[q.quiosque_id] = {
+                        cpu: [],
+                        ram: [],
+                        ping: [],
+                        timestamps: []
+                    };
+                }
+
+                if (!metricsHistoryFull[q.quiosque_id]) {
+                    metricsHistoryFull[q.quiosque_id] = {
+                        cpu: [],
+                        ram: [],
+                        ping: [],
+                        timestamps: []
+                    };
+                }
+
+                const hist = metricsHistory[q.quiosque_id];
+                const histFull = metricsHistoryFull[q.quiosque_id];
+                
+                hist.cpu.push(parseFloat(q.cpu_usage) || 0);
+                hist.ram.push(parseFloat(q.ram_usage) || 0);
+                hist.ping.push(parseInt(q.ping_ms) || 0);
+                hist.timestamps.push(new Date(q.ultima_leitura).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }));
+
+                // Manter histórico completo
+                histFull.cpu.push(parseFloat(q.cpu_usage) || 0);
+                histFull.ram.push(parseFloat(q.ram_usage) || 0);
+                histFull.ping.push(parseInt(q.ping_ms) || 0);
+                histFull.timestamps.push(new Date(q.ultima_leitura).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }));
+
+                if (hist.cpu.length > MAX_HISTORY) {
+                    hist.cpu.shift();
+                    hist.ram.shift();
+                    hist.ping.shift();
+                    hist.timestamps.shift();
+                }
+
+                if (histFull.cpu.length > MAX_HISTORY_FULL) {
+                    histFull.cpu.shift();
+                    histFull.ram.shift();
+                    histFull.ping.shift();
+                    histFull.timestamps.shift();
+                }
+
+                const isOnline = q.status_operacional === 'ONLINE';
+
+                return `
+                    <div class="quiosque-card" onclick="openModal('${q.quiosque_id}')">
+                        <div class="card-header">
+                            <div class="card-title">${q.quiosque_id}</div>
+                            <span class="badge ${isOnline ? 'online' : 'offline'}">
+                                ${isOnline ? '● Online' : '● Offline'}
+                            </span>
+                        </div>
+
+                        <div class="card-body">
+                            <div class="metrics-row">
+                                <div class="metric-item">
+                                    <span class="metric-label">CPU</span>
+                                    <div class="metric-data">
+                                        <span class="metric-value">${parseFloat(q.cpu_usage).toFixed(1)}</span>
+                                        <span class="metric-unit">%</span>
+                                    </div>
+                                </div>
+                                <div class="metric-item">
+                                    <span class="metric-label">RAM</span>
+                                    <div class="metric-data">
+                                        <span class="metric-value">${parseFloat(q.ram_usage).toFixed(1)}</span>
+                                        <span class="metric-unit">%</span>
+                                    </div>
+                                </div>
+                                <div class="metric-item">
+                                    <span class="metric-label">Latência</span>
+                                    <div class="metric-data">
+                                        <span class="metric-value">${parseInt(q.ping_ms)}</span>
+                                        <span class="metric-unit">ms</span>
+                                    </div>
+                                </div>
+                                <div class="metric-item">
+                                    <span class="metric-label">Rede</span>
+                                    <div class="internet-status ${q.status_internet ? 'status-ok' : 'status-error'}">
+                                        ${q.status_internet ? '✓ Conectado' : '✗ Offline'}
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="chart-wrapper">
+                                <canvas id="chart-${q.quiosque_id}"></canvas>
+                            </div>
+                        </div>
+
+                        <div class="card-footer">
+                            <span>${new Date(q.ultima_leitura).toLocaleString('pt-BR', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}</span>
+                            <span style="cursor: pointer; color: #06b6d4;">Clique para mais detalhes →</span>
+                        </div>
+                    </div>
+                `;
+            }
+
+            function renderChart(quiosqueId) {
+                const canvas = document.getElementById(`chart-${quiosqueId}`);
+                if (!canvas) return;
+
+                const hist = metricsHistory[quiosqueId];
+                const ctx = canvas.getContext('2d');
+
+                if (charts[quiosqueId]) charts[quiosqueId].destroy();
+
+                // Criar gradientes suaves para as áreas
+                const gradientCPU = ctx.createLinearGradient(0, 0, 0, 180);
+                gradientCPU.addColorStop(0, 'rgba(249, 115, 22, 0.5)');
+                gradientCPU.addColorStop(0.5, 'rgba(249, 115, 22, 0.25)');
+                gradientCPU.addColorStop(1, 'rgba(249, 115, 22, 0)');
+
+                const gradientRAM = ctx.createLinearGradient(0, 0, 0, 180);
+                gradientRAM.addColorStop(0, 'rgba(6, 182, 212, 0.5)');
+                gradientRAM.addColorStop(0.5, 'rgba(6, 182, 212, 0.25)');
+                gradientRAM.addColorStop(1, 'rgba(6, 182, 212, 0)');
+
+                charts[quiosqueId] = new Chart(ctx, {
+                    type: 'line',
+                    data: {
+                        labels: hist.timestamps,
+                        datasets: [
+                            {
+                                label: 'CPU',
+                                data: hist.cpu,
+                                borderColor: '#f97316',
+                                backgroundColor: gradientCPU,
+                                tension: 0.45,
+                                fill: true,
+                                pointRadius: 5,
+                                pointHoverRadius: 8,
+                                pointBackgroundColor: '#f97316',
+                                pointBorderColor: '#ffffff',
+                                pointBorderWidth: 2.5,
+                                borderWidth: 3,
+                                borderCapStyle: 'round',
+                                borderJoinStyle: 'round'
+                            },
+                            {
+                                label: 'RAM',
+                                data: hist.ram,
+                                borderColor: '#06b6d4',
+                                backgroundColor: gradientRAM,
+                                tension: 0.45,
+                                fill: true,
+                                pointRadius: 5,
+                                pointHoverRadius: 8,
+                                pointBackgroundColor: '#06b6d4',
+                                pointBorderColor: '#ffffff',
+                                pointBorderWidth: 2.5,
+                                borderWidth: 3,
+                                borderCapStyle: 'round',
+                                borderJoinStyle: 'round'
+                            }
+                        ]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        interaction: { 
+                            mode: 'index', 
+                            intersect: false 
+                        },
+                        plugins: {
+                            filler: {
+                                propagate: true
+                            },
+                            legend: {
+                                labels: {
+                                    color: '#cbd5e1',
+                                    font: { size: 12, weight: 700, family: "'Inter', sans-serif" },
+                                    usePointStyle: true,
+                                    pointStyle: 'circle',
+                                    padding: 16,
+                                    boxWidth: 12,
+                                    boxHeight: 12
+                                },
+                                margin: { top: 10, bottom: 10 }
+                            },
+                            tooltip: {
+                                backgroundColor: 'rgba(20, 20, 20, 0.95)',
+                                titleColor: '#e0e7ff',
+                                bodyColor: '#e0e7ff',
+                                borderColor: '#f97316',
+                                borderWidth: 2,
+                                padding: 12,
+                                titleFont: { weight: 700, size: 14, family: "'Inter', sans-serif" },
+                                bodyFont: { size: 13, weight: 600, family: "'Inter', sans-serif" },
+                                displayColors: true,
+                                caretPadding: 12,
+                                boxPadding: 8,
+                                callbacks: {
+                                    label: function(context) {
+                                        let label = context.dataset.label || '';
+                                        if (label) {
+                                            label += ': ';
+                                        }
+                                        const val = (context.parsed && context.parsed.y !== null) ? context.parsed.y.toFixed(2) : '0.00';
+                                        label += val + '%';
+                                        return label;
+                                    }
+                                }
+                            }
+                        },
+                        scales: {
+                            y: {
+                                display: true,
+                                min: 0,
+                                max: 100,
+                                grid: { 
+                                    color: 'rgba(148, 163, 184, 0.12)',
+                                    drawBorder: false,
+                                    lineWidth: 1.5
+                                },
+                                ticks: { 
+                                    color: '#64748b', 
+                                    font: { size: 11, weight: 600, family: "'Inter', sans-serif" },
+                                    padding: 10,
+                                    callback: function(value) {
+                                        return value + '%';
+                                    }
+                                }
+                            },
+                            x: {
+                                display: true,
+                                grid: { display: false, drawBorder: false },
+                                ticks: { 
+                                    color: '#64748b', 
+                                    font: { size: 10, weight: 600, family: "'Inter', sans-serif" },
+                                    maxRotation: 0,
+                                    minRotation: 0,
+                                    padding: 8
+                                }
+                            }
+                        }
+                    }
+                });
+            }
+
+            fetchStatus();
+            setInterval(fetchStatus, 30000);
+
+            // Funções de Modal
+            function openModal(quiosqueId) {
+                const modal = document.getElementById('detailsModal');
+                const histFull = metricsHistoryFull[quiosqueId];
+                
+                if (!histFull || histFull.cpu.length === 0) {
+                    alert('Ainda não há dados completos para este quiosque.');
+                    return;
+                }
+
+                document.getElementById('modalTitle').textContent = `${quiosqueId} - Histórico do Dia`;
+                modal.classList.add('active');
+
+                // Renderizar gráfico na modal
+                setTimeout(() => {
+                    renderModalChart(quiosqueId);
+                    updateModalStats(quiosqueId);
+                }, 100);
+            }
+
+            function closeModal() {
+                const modal = document.getElementById('detailsModal');
+                modal.classList.remove('active');
+                if (modalChart) {
+                    modalChart.destroy();
+                    modalChart = null;
+                }
+            }
+
+            function renderModalChart(quiosqueId) {
+                const canvas = document.getElementById('modalChart');
+                const histFull = metricsHistoryFull[quiosqueId];
+                const ctx = canvas.getContext('2d');
+
+                if (modalChart) modalChart.destroy();
+
+                const gradientCPU = ctx.createLinearGradient(0, 0, 0, 400);
+                gradientCPU.addColorStop(0, 'rgba(249, 115, 22, 0.5)');
+                gradientCPU.addColorStop(0.5, 'rgba(249, 115, 22, 0.25)');
+                gradientCPU.addColorStop(1, 'rgba(249, 115, 22, 0)');
+
+                const gradientRAM = ctx.createLinearGradient(0, 0, 0, 400);
+                gradientRAM.addColorStop(0, 'rgba(6, 182, 212, 0.5)');
+                gradientRAM.addColorStop(0.5, 'rgba(6, 182, 212, 0.25)');
+                gradientRAM.addColorStop(1, 'rgba(6, 182, 212, 0)');
+
+                modalChart = new Chart(ctx, {
+                    type: 'line',
+                    data: {
+                        labels: histFull.timestamps,
+                        datasets: [
+                            {
+                                label: 'CPU',
+                                data: histFull.cpu,
+                                borderColor: '#f97316',
+                                backgroundColor: gradientCPU,
+                                tension: 0.45,
+                                fill: true,
+                                pointRadius: 6,
+                                pointHoverRadius: 9,
+                                pointBackgroundColor: '#f97316',
+                                pointBorderColor: '#ffffff',
+                                pointBorderWidth: 2.5,
+                                borderWidth: 3,
+                                borderCapStyle: 'round',
+                                borderJoinStyle: 'round'
+                            },
+                            {
+                                label: 'RAM',
+                                data: histFull.ram,
+                                borderColor: '#06b6d4',
+                                backgroundColor: gradientRAM,
+                                tension: 0.45,
+                                fill: true,
+                                pointRadius: 6,
+                                pointHoverRadius: 9,
+                                pointBackgroundColor: '#06b6d4',
+                                pointBorderColor: '#ffffff',
+                                pointBorderWidth: 2.5,
+                                borderWidth: 3,
+                                borderCapStyle: 'round',
+                                borderJoinStyle: 'round'
+                            }
+                        ]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        interaction: { mode: 'index', intersect: false },
+                        plugins: {
+                            legend: {
+                                labels: {
+                                    color: '#cbd5e1',
+                                    font: { size: 13, weight: 700, family: "'Inter', sans-serif" },
+                                    usePointStyle: true,
+                                    pointStyle: 'circle',
+                                    padding: 20,
+                                    boxWidth: 12,
+                                    boxHeight: 12
+                                },
+                                margin: { top: 10, bottom: 10 }
+                            },
+                            tooltip: {
+                                backgroundColor: 'rgba(20, 20, 20, 0.95)',
+                                titleColor: '#e0e7ff',
+                                bodyColor: '#e0e7ff',
+                                borderColor: '#f97316',
+                                borderWidth: 2,
+                                padding: 14,
+                                titleFont: { weight: 700, size: 14, family: "'Inter', sans-serif" },
+                                bodyFont: { size: 13, weight: 600, family: "'Inter', sans-serif" },
+                                displayColors: true,
+                                caretPadding: 12,
+                                boxPadding: 8,
+                                callbacks: {
+                                    label: function(context) {
+                                        let label = context.dataset.label || '';
+                                        if (label) label += ': ';
+                                        const val = (context.parsed && context.parsed.y !== null) ? context.parsed.y.toFixed(2) : '0.00';
+                                        label += val + '%';
+                                        return label;
+                                    }
+                                }
+                            }
+                        },
+                        scales: {
+                            y: {
+                                display: true,
+                                min: 0,
+                                max: 100,
+                                grid: { color: 'rgba(148, 163, 184, 0.12)', drawBorder: false, lineWidth: 1.5 },
+                                ticks: { 
+                                    color: '#64748b', 
+                                    font: { size: 12, weight: 600, family: "'Inter', sans-serif" },
+                                    padding: 10,
+                                    callback: function(value) { return value + '%'; }
+                                }
+                            },
+                            x: {
+                                display: true,
+                                grid: { display: false, drawBorder: false },
+                                ticks: { 
+                                    color: '#64748b', 
+                                    font: { size: 11, weight: 600, family: "'Inter', sans-serif" },
+                                    maxRotation: 45,
+                                    minRotation: 0,
+                                    padding: 8
+                                }
+                            }
+                        }
+                    }
+                });
+            }
+
+            function updateModalStats(quiosqueId) {
+                const histFull = metricsHistoryFull[quiosqueId];
+                const cpuValues = histFull.cpu.filter(v => v > 0);
+                const ramValues = histFull.ram.filter(v => v > 0);
+
+                const avgCPU = cpuValues.length > 0 ? (cpuValues.reduce((a, b) => a + b) / cpuValues.length).toFixed(1) : '0';
+                const maxCPU = cpuValues.length > 0 ? Math.max(...cpuValues).toFixed(1) : '0';
+                const avgRAM = ramValues.length > 0 ? (ramValues.reduce((a, b) => a + b) / ramValues.length).toFixed(1) : '0';
+                const maxRAM = ramValues.length > 0 ? Math.max(...ramValues).toFixed(1) : '0';
+
+                document.getElementById('modalStats').innerHTML = `
+                    <div class="modal-stat">
+                        <div class="modal-stat-label">CPU Média</div>
+                        <div class="modal-stat-value">${avgCPU}%</div>
+                    </div>
+                    <div class="modal-stat">
+                        <div class="modal-stat-label">CPU Máxima</div>
+                        <div class="modal-stat-value">${maxCPU}%</div>
+                    </div>
+                    <div class="modal-stat">
+                        <div class="modal-stat-label">RAM Média</div>
+                        <div class="modal-stat-value">${avgRAM}%</div>
+                    </div>
+                    <div class="modal-stat">
+                        <div class="modal-stat-label">RAM Máxima</div>
+                        <div class="modal-stat-value">${maxRAM}%</div>
+                    </div>
+                `;
+            }
+
+            // Fechar modal ao clicar fora
+            document.getElementById('detailsModal').addEventListener('click', function(e) {
+                if (e.target === this) {
+                    closeModal();
+                }
+            });
+        </script>
+    </div>
+</body>
+</html>
