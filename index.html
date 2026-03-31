@@ -410,6 +410,21 @@
             color: #e0e7ff;
         }
 
+        .process-list {
+            margin-top: 24px;
+            width: 100%;
+            border-collapse: collapse;
+            background: rgba(30, 41, 59, 0.3);
+            border-radius: 8px;
+            overflow: hidden;
+        }
+        .process-list th, .process-list td {
+            padding: 12px;
+            text-align: left;
+            border-bottom: 1px solid rgba(148, 163, 184, 0.1);
+        }
+        .process-list th { color: #64748b; font-size: 11px; text-transform: uppercase; }
+
         @media (max-width: 768px) {
             body { padding: 20px 16px; }
             h1 { font-size: 24px; }
@@ -433,7 +448,7 @@
             <h2 style="color:white; margin-bottom:20px;">Acesso Restrito</h2>
             <input type="email" id="user-email" placeholder="E-mail">
             <input type="password" id="user-pass" placeholder="Senha">
-            <button onclick="realizarLogin()">Entrar</button>
+            <button id="btn-login" onclick="realizarLogin()">Entrar</button>
             <p id="msg-erro" style="color:red; font-size:12px; margin-top:10px; display:none;">Acesso negado.</p>
         </div>
     </div>
@@ -510,6 +525,11 @@
             async function realizarLogin() {
                 const email = document.getElementById('user-email').value;
                 const pass = document.getElementById('user-pass').value;
+                const btn = document.getElementById('btn-login');
+
+                btn.disabled = true;
+                btn.textContent = "Autenticando...";
+                document.getElementById('msg-erro').style.display = 'none';
 
                 const { data, error } = await supabaseClient.auth.signInWithPassword({
                     email: email,
@@ -518,6 +538,8 @@
 
                 if (error) {
                     document.getElementById('msg-erro').style.display = 'block';
+                    btn.disabled = false;
+                    btn.textContent = "Entrar";
                 } else {
                     // Se logou, esconde o login e mostra o seu monitor
                     document.getElementById('login-screen').style.display = 'none';
@@ -587,8 +609,8 @@
             function updateStats(data) {
                 const online = data.filter(q => q.status_operacional === 'ONLINE').length;
                 const offline = data.filter(q => q.status_operacional === 'OFFLINE').length;
-                const avgCpu = (data.reduce((sum, q) => sum + parseFloat(q.cpu_usage), 0) / data.length).toFixed(1);
-                const avgRam = (data.reduce((sum, q) => sum + parseFloat(q.ram_usage), 0) / data.length).toFixed(1);
+                const avgCpu = (data.reduce((sum, q) => sum + (parseFloat(q.cpu_usage) || 0), 0) / (data.length || 1)).toFixed(1);
+                const avgRam = (data.reduce((sum, q) => sum + (parseFloat(q.ram_usage) || 0), 0) / (data.length || 1)).toFixed(1);
 
                 document.getElementById('count-online').textContent = online;
                 document.getElementById('count-offline').textContent = offline;
@@ -603,6 +625,7 @@
                         cpu: [],
                         ram: [],
                         ping: [],
+                        processes: [],
                         timestamps: []
                     };
                 }
@@ -612,6 +635,7 @@
                         cpu: [],
                         ram: [],
                         ping: [],
+                        processes: [],
                         timestamps: []
                     };
                 }
@@ -622,12 +646,14 @@
                 hist.cpu.push(parseFloat(q.cpu_usage) || 0);
                 hist.ram.push(parseFloat(q.ram_usage) || 0);
                 hist.ping.push(parseInt(q.ping_ms) || 0);
+                hist.processes.push(q.top_processes || []);
                 hist.timestamps.push(new Date(q.ultima_leitura).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }));
 
                 // Manter histórico completo
                 histFull.cpu.push(parseFloat(q.cpu_usage) || 0);
                 histFull.ram.push(parseFloat(q.ram_usage) || 0);
                 histFull.ping.push(parseInt(q.ping_ms) || 0);
+                histFull.processes.push(q.top_processes || []);
                 histFull.timestamps.push(new Date(q.ultima_leitura).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }));
 
                 if (hist.cpu.length > MAX_HISTORY) {
@@ -1008,6 +1034,9 @@
                 const avgRAM = ramValues.length > 0 ? (ramValues.reduce((a, b) => a + b) / ramValues.length).toFixed(1) : '0';
                 const maxRAM = ramValues.length > 0 ? Math.max(...ramValues).toFixed(1) : '0';
 
+                // Pega os processos da leitura mais recente
+                const latestProcesses = histFull.processes[histFull.processes.length - 1] || [];
+
                 document.getElementById('modalStats').innerHTML = `
                     <div class="modal-stat">
                         <div class="modal-stat-label">CPU Média</div>
@@ -1024,6 +1053,22 @@
                     <div class="modal-stat">
                         <div class="modal-stat-label">RAM Máxima</div>
                         <div class="modal-stat-value">${maxRAM}%</div>
+                    </div>
+                    <div style="grid-column: span 4;">
+                        <h3 style="margin: 20px 0 10px 0; color: #cbd5e1;">Top Processos (Uso de Memória)</h3>
+                        <table class="process-list">
+                            <thead>
+                                <tr><th>Programa</th><th>Uso de RAM</th></tr>
+                            </thead>
+                            <tbody>
+                                ${latestProcesses.map(p => `
+                                    <tr>
+                                        <td>${p.nome}</td>
+                                        <td style="color: #06b6d4; font-weight: bold;">${p.mem}%</td>
+                                    </tr>
+                                `).join('')}
+                            </tbody>
+                        </table>
                     </div>
                 `;
             }
